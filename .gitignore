@@ -1,0 +1,31 @@
+# 환경변수 / 시크릿
+.env
+.env.local
+*.env
+k8s/01-secret.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.Python
+venv/
+env/
+
+# 백업 파일
+*.bak
+*.backup
+*.bak.*
+
+# 데이터 폴더
+photo_service/data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

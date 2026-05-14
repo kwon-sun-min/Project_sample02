@@ -1,0 +1,9 @@
+FROM nginx:latest
+
+# 프론트엔드 정적 파일 복사
+COPY frontend /var/www/frontend
+
+# nginx 설정 파일 교체
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+
+EXPOSE 80
