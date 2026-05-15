@@ -1,11 +1,11 @@
 # ════════════════════════════════════════════════════════════════
-# 워커 노드 1대 구성 (test-worker2)
+# 워커 노드 1대 구성 (test-worker22)
 #
-# 3개 PV 모두 test-worker2에 생성하되,
+# 3개 PV 모두 test-worker22에 생성하되,
 # 각 파드의 데이터가 섞이지 않도록 경로를 다르게 설정
 #
 # 구조:
-#   test-worker2
+#   test-worker22
 #     ├── /mnt/data/galera/node0  ← galera-0 전용
 #     ├── /mnt/data/galera/node1  ← galera-1 전용
 #     └── /mnt/data/galera/node2  ← galera-2 전용
@@ -38,7 +38,7 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - test-worker2
+          - test-worker22
 
 ---
 apiVersion: v1
@@ -65,7 +65,7 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - test-worker2
+          - test-worker22
 
 ---
 apiVersion: v1
@@ -92,4 +92,4 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - test-worker2
+          - test-worker22
