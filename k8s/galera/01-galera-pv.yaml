@@ -27,6 +27,7 @@ spec:
   storageClassName: manual
   hostPath:
     path: /mnt/data/galera/node0
+    type: DirectoryOrCreate
   claimRef:
     name: data-galera-0
     namespace: default
@@ -53,6 +54,7 @@ spec:
   storageClassName: manual
   hostPath:
     path: /mnt/data/galera/node1
+    type: DirectoryOrCreate
   claimRef:
     name: data-galera-1
     namespace: default
@@ -79,6 +81,7 @@ spec:
   storageClassName: manual
   hostPath:
     path: /mnt/data/galera/node2
+    type: DirectoryOrCreate
   claimRef:
     name: data-galera-2
     namespace: default

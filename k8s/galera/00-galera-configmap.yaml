@@ -3,9 +3,6 @@ kind: ConfigMap
 metadata:
   name: galera-config
 data:
-  # ─────────────────────────────────────────
-  # MariaDB + Galera 핵심 설정
-  # ─────────────────────────────────────────
   galera.cnf: |
     [mysqld]
     binlog_format=ROW
@@ -13,24 +10,12 @@ data:
     innodb_autoinc_lock_mode=2
     bind-address=0.0.0.0
 
-    # Galera 활성화
     wsrep_on=ON
     wsrep_provider=/usr/lib/galera/libgalera_smm.so
-
-    # 클러스터 이름 (3노드 모두 동일해야 함)
     wsrep_cluster_name=employees_galera
-
-    # 클러스터 멤버 주소 (StatefulSet이 만드는 DNS 이름)
-    # 형식: <파드이름>.<헤드리스서비스이름>
-    wsrep_cluster_address=gcomm://galera-0.galera,galera-1.galera,galera-2.galera
-
-    # SST: 노드가 새로 합류할 때 데이터 전송 방식
+    wsrep_cluster_address=gcomm://galera-0.galera.default.svc.cluster.local,galera-1.galera.default.svc.cluster.local,galera-2.galera.default.svc.cluster.local
     wsrep_sst_method=rsync
 
-  # ─────────────────────────────────────────
-  # 초기 DB/테이블 생성 스크립트
-  # (최초 부트스트랩 시 한 번만 실행됨)
-  # ─────────────────────────────────────────
   init.sql: |
     CREATE DATABASE IF NOT EXISTS employees;
     USE employees;
@@ -49,22 +34,35 @@ data:
       last_access_time DATETIME DEFAULT NOW() COMMENT '마지막 조회 시각'
     );
 
-  # ─────────────────────────────────────────
-  # 시작 스크립트
-  # - galera-0이 최초 기동 시: 클러스터 부트스트랩
-  # - 이후 재기동 or 다른 노드: 기존 클러스터 합류
-  # ─────────────────────────────────────────
   start.sh: |
     #!/bin/bash
     set -e
 
-    # 호스트명에서 순번 추출: galera-0 → 0, galera-1 → 1
     ORDINAL="${HOSTNAME##*-}"
+    echo ">>> [$HOSTNAME] 시작"
 
-    if [[ "$ORDINAL" == "0" && ! -d "/var/lib/mysql/mysql" ]]; then
-      echo ">>> [galera-0] 데이터 없음 → 최초 클러스터 부트스트랩"
-      exec docker-entrypoint.sh mysqld --wsrep-new-cluster
+    if [[ "$ORDINAL" == "0" ]]; then
+      if [[ ! -d "/var/lib/mysql/mysql" ]]; then
+        echo ">>> [galera-0] 최초 클러스터 부트스트랩"
+        exec docker-entrypoint.sh mysqld --wsrep-new-cluster
+      else
+        echo ">>> [galera-0] 재시작 - 클러스터 재합류"
+        exec docker-entrypoint.sh mysqld
+      fi
     else
-      echo ">>> [$HOSTNAME] 기존 클러스터에 합류"
+      echo ">>> [$HOSTNAME] galera-0 DNS 대기 중..."
+      until getent hosts galera-0.galera.default.svc.cluster.local > /dev/null 2>&1; do
+        echo "    galera-0 DNS 미응답, 5초 후 재시도..."
+        sleep 5
+      done
+
+      echo ">>> [$HOSTNAME] galera-0 MySQL 대기 중..."
+      until mysqladmin ping -h galera-0.galera.default.svc.cluster.local \
+            -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; do
+        echo "    galera-0 MySQL 미응답, 5초 후 재시도..."
+        sleep 5
+      done
+
+      echo ">>> [$HOSTNAME] 클러스터 합류"
       exec docker-entrypoint.sh mysqld
     fi
