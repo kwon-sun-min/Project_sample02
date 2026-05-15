@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: galera-config
+data:
+  # ─────────────────────────────────────────
+  # MariaDB + Galera 핵심 설정
+  # ─────────────────────────────────────────
+  galera.cnf: |
+    [mysqld]
+    binlog_format=ROW
+    default-storage-engine=innodb
+    innodb_autoinc_lock_mode=2
+    bind-address=0.0.0.0
+
+    # Galera 활성화
+    wsrep_on=ON
+    wsrep_provider=/usr/lib/galera/libgalera_smm.so
+
+    # 클러스터 이름 (3노드 모두 동일해야 함)
+    wsrep_cluster_name=employees_galera
+
+    # 클러스터 멤버 주소 (StatefulSet이 만드는 DNS 이름)
+    # 형식: <파드이름>.<헤드리스서비스이름>
+    wsrep_cluster_address=gcomm://galera-0.galera,galera-1.galera,galera-2.galera
+
+    # SST: 노드가 새로 합류할 때 데이터 전송 방식
+    wsrep_sst_method=rsync
+
+  # ─────────────────────────────────────────
+  # 초기 DB/테이블 생성 스크립트
+  # (최초 부트스트랩 시 한 번만 실행됨)
+  # ─────────────────────────────────────────
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS employees;
+    USE employees;
+
+    CREATE TABLE IF NOT EXISTS employee (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      object_key NVARCHAR(80),
+      full_name NVARCHAR(200) NOT NULL,
+      location NVARCHAR(200) NOT NULL,
+      job_title NVARCHAR(200) NOT NULL,
+      badges NVARCHAR(200) NOT NULL,
+      created_datetime DATETIME DEFAULT NOW(),
+      storage_type NVARCHAR(50) DEFAULT 'ceph' COMMENT 'ceph 또는 aws',
+      backup_status TINYINT(1) DEFAULT 0 COMMENT '백업 여부 0=미완료 1=완료',
+      upload_time DATETIME NULL COMMENT '사진 업로드 시각',
+      last_access_time DATETIME DEFAULT NOW() COMMENT '마지막 조회 시각'
+    );
+
+  # ─────────────────────────────────────────
+  # 시작 스크립트
+  # - galera-0이 최초 기동 시: 클러스터 부트스트랩
+  # - 이후 재기동 or 다른 노드: 기존 클러스터 합류
+  # ─────────────────────────────────────────
+  start.sh: |
+    #!/bin/bash
+    set -e
+
+    # 호스트명에서 순번 추출: galera-0 → 0, galera-1 → 1
+    ORDINAL="${HOSTNAME##*-}"
+
+    if [[ "$ORDINAL" == "0" && ! -d "/var/lib/mysql/mysql" ]]; then
+      echo ">>> [galera-0] 데이터 없음 → 최초 클러스터 부트스트랩"
+      exec docker-entrypoint.sh mysqld --wsrep-new-cluster
+    else
+      echo ">>> [$HOSTNAME] 기존 클러스터에 합류"
+      exec docker-entrypoint.sh mysqld
+    fi

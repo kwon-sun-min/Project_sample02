@@ -1,0 +1,92 @@
+# ════════════════════════════════════════════════════════════════
+# 워커 노드 1대 구성 (test-worker2)
+#
+# 3개 PV 모두 test-worker2에 생성하되,
+# 각 파드의 데이터가 섞이지 않도록 경로를 다르게 설정
+#
+# 구조:
+#   test-worker2
+#     ├── /mnt/data/galera/node0  ← galera-0 전용
+#     ├── /mnt/data/galera/node1  ← galera-1 전용
+#     └── /mnt/data/galera/node2  ← galera-2 전용
+#
+# ⚠️  주의: 워커 1대이므로 노드 장애 시 전체 중단됨
+#           학습/기능 테스트 목적의 구성
+# ════════════════════════════════════════════════════════════════
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: galera-pv-0
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/data/galera/node0
+  claimRef:
+    name: data-galera-0
+    namespace: default
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - test-worker2
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: galera-pv-1
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/data/galera/node1
+  claimRef:
+    name: data-galera-1
+    namespace: default
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - test-worker2
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: galera-pv-2
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/data/galera/node2
+  claimRef:
+    name: data-galera-2
+    namespace: default
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - test-worker2
