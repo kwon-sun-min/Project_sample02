@@ -23,12 +23,18 @@ echo "✅ 03-pv.yaml 수정 완료"
 cat ~/Project_sample02/k8s/03-pv.yaml | grep -A2 "values:"
 
 # ============================================
-# STEP 2: Kubernetes 리소스 전체 적용
+# STEP 2: Kubernetes 리소스 적용 (metallb-config, ingress 제외)
 # ============================================
 echo ""
 echo "[STEP 2] Kubernetes 리소스 적용 중..."
-cd ~/Project_sample02/k8s   # ⚠️ yaml 파일들이 있는 경로로 수정하세요
-kubectl apply -f .
+cd ~/Project_sample02/k8s
+for f in *.yaml; do
+  if [[ "$f" == "metallb-config.yaml" || "$f" == "13-ingress.yaml" ]]; then
+    echo "⏭ 나중에 적용: $f"
+    continue
+  fi
+  kubectl apply -f "$f"
+done
 echo "✅ K8s 리소스 적용 완료"
 
 # ============================================
@@ -63,6 +69,9 @@ spec:
   ipAddressPools:
   - first-pool
 EOF
+
+# metallb-config.yaml도 적용
+kubectl apply -f ~/Project_sample02/k8s/metallb-config.yaml
 echo "✅ MetalLB 설치 완료"
 
 # ============================================
@@ -81,6 +90,9 @@ kubectl wait --namespace ingress-nginx \
 
 kubectl patch svc ingress-nginx-controller -n ingress-nginx \
   -p '{"spec": {"type": "LoadBalancer"}}'
+
+# 13-ingress.yaml 적용
+kubectl apply -f ~/Project_sample02/k8s/13-ingress.yaml
 echo "✅ Ingress Controller 설치 완료"
 
 # ============================================
