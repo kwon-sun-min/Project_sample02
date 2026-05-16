@@ -1,7 +1,7 @@
 import os
 import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -102,39 +102,19 @@ async def upload_photo(file: UploadFile = File(...)):
 @app.get("/photos/{object_key}")
 async def get_photo(object_key: str):
     """
-    Presigned URL 생성 후 Redirect
+    Ceph에서 이미지를 서버 측에서 가져와 스트리밍 응답으로 반환
+    (브라우저가 내부망 Ceph에 직접 접속하지 않아도 됨)
     """
 
     try:
-        # 파일 존재 확인
-        s3_client.head_object(
-            Bucket=S3_BUCKET,
-            Key=object_key
-        )
+        response = s3_client.get_object(Bucket=S3_BUCKET, Key=object_key)
+        content_type = response.get("ContentType", "image/jpeg")
+        return StreamingResponse(response["Body"], media_type=content_type)
 
     except ClientError:
         raise HTTPException(
             status_code=404,
             detail="Photo not found"
-        )
-
-    try:
-        # Presigned URL 생성
-        presigned_url = s3_client.generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": S3_BUCKET,
-                "Key": object_key
-            },
-            ExpiresIn=3600
-        )
-
-        return RedirectResponse(url=presigned_url)
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not generate URL: {e}"
         )
 
 # =========================================================

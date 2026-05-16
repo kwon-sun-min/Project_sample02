@@ -15,6 +15,7 @@ spec:
       containers:
       - name: photo-service
         image: kwsumin01/photo-service:v1
+        imagePullPolicy: Always
         ports:
         - containerPort: 5003
         envFrom:
