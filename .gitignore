@@ -29,3 +29,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+k8s/backup/00-aws-secret.yaml

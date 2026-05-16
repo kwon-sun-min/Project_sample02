@@ -136,6 +136,11 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 info "초기화 완료"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+# node-debugger Pod 정리
+kubectl delete pod -l app=node-debugger --ignore-not-found > /dev/null 2>&1 || true
+kubectl get pods --no-headers 2>/dev/null | awk '/node-debugger/{print $1}' \
+  | xargs -r kubectl delete pod --ignore-not-found > /dev/null 2>&1 || true
+
 echo "[현재 Pod 상태]"
 kubectl get pod 2>/dev/null || echo "  (Pod 없음)"
 echo ""

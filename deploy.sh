@@ -47,7 +47,8 @@ if [ -z "$WORKER_NODE" ]; then
   error "Worker 노드를 찾을 수 없습니다. 클러스터 상태를 확인하세요."
 fi
 
-info "감지된 Worker 노드: $WORKER_NODE"
+WORKER_IP=$(kubectl get node "$WORKER_NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+info "감지된 Worker 노드: $WORKER_NODE ($WORKER_IP)"
 sed -i "s/\"test-worker[0-9]*\"/\"$WORKER_NODE\"/g" "$K8S_DIR/galera/01-galera-pv.yaml"
 info "$K8S_DIR/galera/01-galera-pv.yaml 수정 완료"
 
@@ -105,7 +106,9 @@ kubectl wait --namespace ingress-nginx \
 
 kubectl patch svc ingress-nginx-controller -n ingress-nginx \
   -p '{"spec": {"type": "LoadBalancer"}}'
-info "Ingress Controller 설치 완료"
+kubectl patch svc ingress-nginx-controller -n ingress-nginx \
+  -p "{\"spec\": {\"externalIPs\": [\"$WORKER_IP\"]}}"
+info "Ingress Controller 설치 완료 (externalIP: $WORKER_IP)"
 
 # ================================================================
 # STEP 4. Secret 배포 (MariaDB / Ceph / AWS)
@@ -131,6 +134,38 @@ for pv in galera-pv-0 galera-pv-1 galera-pv-2; do
   fi
 done
 
+info "Galera 데이터 디렉토리 초기화 중..."
+kubectl delete pod galera-data-cleanup --ignore-not-found > /dev/null 2>&1
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: galera-data-cleanup
+spec:
+  nodeName: $WORKER_NODE
+  restartPolicy: Never
+  containers:
+  - name: cleanup
+    image: busybox
+    command: ["sh", "-c", "rm -rf /mnt/node0/* /mnt/node1/* /mnt/node2/* && echo done"]
+    volumeMounts:
+    - name: galera-data
+      mountPath: /mnt
+    securityContext:
+      privileged: true
+  volumes:
+  - name: galera-data
+    hostPath:
+      path: /mnt/data/galera
+EOF
+for i in {1..12}; do
+  PHASE=$(kubectl get pod galera-data-cleanup -o jsonpath='{.status.phase}' 2>/dev/null)
+  [[ "$PHASE" == "Succeeded" ]] && break
+  sleep 5
+done
+kubectl delete pod galera-data-cleanup --ignore-not-found > /dev/null 2>&1
+info "Galera 데이터 디렉토리 초기화 완료"
+
 kubectl apply -f "$K8S_DIR/galera/00-galera-configmap.yaml"
 kubectl apply -f "$K8S_DIR/galera/01-galera-pv.yaml"
 kubectl apply -f "$K8S_DIR/galera/03-galera-services.yaml"
@@ -148,8 +183,17 @@ echo "[STEP 6] DB 테이블 생성 중..."
 waiting "galera-0 Pod Ready 재확인..."
 kubectl wait --for=condition=ready pod/galera-0 --timeout=180s
 
+waiting "MySQL 준비 대기 중..."
+for i in {1..24}; do
+  if kubectl exec galera-0 -- mysqladmin ping -h 127.0.0.1 -u root -pkosa1004 --silent 2>/dev/null; then
+    break
+  fi
+  waiting "  MySQL 대기 중... ($i/24)"
+  sleep 5
+done
+
 kubectl cp "$BASEDIR/employee_server/database_create_tables.sql" galera-0:/tmp/init.sql
-kubectl exec -it galera-0 -- mysql -u root -pkosa1004 employees -e "source /tmp/init.sql"
+kubectl exec galera-0 -- mysql -u root -pkosa1004 employees -e "source /tmp/init.sql"
 info "DB 테이블 생성 완료"
 
 # ================================================================
@@ -225,8 +269,6 @@ spec:
 EOF
 
 waiting "백업 실행 중... (최대 3분)"
-kubectl wait --for=condition=Ready pod/backup-test --timeout=60s \
-  || error "Pod 시작 실패. 'kubectl describe pod backup-test' 로 원인 확인"
 
 for i in {1..36}; do
   PHASE=$(kubectl get pod backup-test -o jsonpath='{.status.phase}' 2>/dev/null)
